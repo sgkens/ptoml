@@ -1,0 +1,7 @@
+bin/
+obj/
+ptoml/bin
+ptoml/obj
+coverage.xml
+lib/ptoml
+dist/
