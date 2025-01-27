@@ -1,38 +1,260 @@
 stages:
-  - build # dependancies
-  - pester # pester test script
-  - test_pwsh # test powershell core latest
-  - test_powershell # test powershell
-  - deploy_psprivate # deploy to psgallary private instance
-  - deploy_psgallary # deploy to psgallary
-build-job:
+  - test
+  - build
+  - tag
+  - release
+  - deploy_local
+  - deploy
+
+
+#--------------------------------
+# Pester ( Test Stage )
+#--------------------------------
+pester:
+  stage: test
+  image: docker.io/phellams/phellams-psm-builder:latest
+  tags:
+    - docker
+  script:
+    - invoke-Pester -Script .\test\Test-Unit-Pester.ps1 -CI || exit 1
+
+#--------------------------------
+# Pester Test Stage & Coverage ( Test Stage )
+#--------------------------------
+pester_coverage:
+  stage: test
+  image: docker.io/phellams/phellams-psm-builder:latest
+  tags:
+    - docker
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_BUILD_STAGE == "test" && $CI_BUILD_STATUS == "success"'
+  script:
+    - Invoke-Pester -Script .\build\scripts\test-pester-before-build.ps1 -CI || exit 1;
+  artifacts:
+    paths:
+      - ./coverage.xml
+
+#--------------------------------
+# Script Analyzer ( Test Stage )
+#--------------------------------
+analyzer:
+  stage: test
+  image: docker.io/phellams/phellams-psm-builder:latest
+  tags:
+    - docker
+  rules:
+    - if: '$CI_BUILD_STAGE == "test" && $CI_BUILD_STATUS == "success"'
+  script:
+    - ./devops/scripts/test_scriptanalyzer_before_build.ps1
+  artifacts:
+    paths:
+      - ./coverage.xml
+
+#--------------------------------
+# Build Module Stage ( Build Stage )
+#--------------------------------
+build:
   stage: build
+  image: docker.io/phellams/phellams-psm-builder:latest
+  tags:
+    - docker
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_BUILD_STAGE == "test" && $CI_BUILD_STATUS == "success"'
+  script:
+    - ./devops/scripts/build-module.ps1
+  artifacts:
+    paths:
+      - ./dist/*
+      - ./coverage.xml
+
+
+#--------------------------------
+# Create Nuget Packages Stage ( Build Stage )
+#--------------------------------
+packages:
+  stage: build
+  image: docker.io/phellams/phellams-psm-builder:latest
+  tags:
+    - docker
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_BUILD_STAGE == "build" && $CI_BUILD_STATUS == "success"'
+  script:
+    - ./devops/scripts/Build-packages.ps1
+  artifacts:
+    paths:
+      - ./dist/*
+      - ./coverage.xml
+
+
+# --------------------------------
+# Create tag for local gitlab instance ( Release Stage )
+# --------------------------------
+tag:
+  stage: release
+  image: docker.io/phellams/phellams-psm-builder:latest
+  tags:
+    - docker
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_BUILD_STAGE == "build" && $CI_BUILD_STATUS == "success"'
+    # - if: '$CI_SERVER_URL == "https://$ENV:GITLAB_HOST"'
+  script: 
+    - .\devops\scripts\release-from-tag-gitlab-se.ps1
+  artifacts:
+    paths:
+      - ./dist/*
+
+# --------------------------------
+# Mirror to gitlab and github
+#  - mirror to public pointers before release stage
+#  - Tags are automatically mirrored, however, we need to create a release manually via 
+#    the public pointers
+# --------------------------------
+mirror:
+  stage: release
+  image: docker.io/phellams/phellams-psm-builder:latest
+  tags:
+    - docker
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_BUILD_STAGE == "release" && $CI_BUILD_STATUS == "success"'
+  script: 
+    - .\build\scripts\mirror-create-pointers.ps1
+  artifacts:
+    paths:
+      - ./dist/*
+
+
+#--------------------------------
+# Create gitlab local
+#--------------------------------
+# create_release:
+#   stage: release
+#   image: docker.io/phellams/phellams-psm-builder:latest
+#   tags:
+#     - docker
+#   rules:
+#     - if: '$CI_COMMIT_BRANCH == "main" && $CI_BUILD_STAGE == "deploy" && $CI_BUILD_STATUS == "success"'
+#   script: 
+#     - .\build\scripts\bt10-ci-create-release-from-tag.ps1
+#   artifacts:
+#     paths:
+#       - ./dist/*.*.nupkg
+#       - ./dist/*.*.zip
+
+#--------------------------------
+# Create Release gitlab
+#--------------------------------
+gitlab:
+  stage: release
+  image: docker.io/phellams/phellams-psm-builder:latest
+  tags:
+    - docker
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_BUILD_STAGE == "release" && $CI_BUILD_STATUS == "success"'
+  script: 
+    - .\build\scripts\release-from-tag-gitlab.ps1
+  artifacts:
+    paths:
+      - ./dist/*.*.nupkg
+      - ./dist/*.*.zip
+
+
+#--------------------------------
+# Create Release github
+#--------------------------------
+github:
+  stage: release
+  image: docker.io/phellams/phellams-psm-builder:latest
+  tags:
+    - docker
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_BUILD_STAGE == "release" && $CI_BUILD_STATUS == "success"'
+  script: 
+    - .\build\scripts\release-from-tag-github.ps1
+  artifacts:
+    paths:
+      - ./dist/*.*.nupkg
+      - ./dist/*.*.zip
+
+
+#--------------------------------
+# Deploy GitLab Package
+#--------------------------------
+gitlab_nuget:
+  stage: deploy
+  image: docker.io/phellams/phellams-psm-builder:latest
+  tags:
+    - docker
+  script:
+    - ./devops/scripts/deploy-gitlab.ps1
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_BUILD_STAGE == "release" && $CI_BUILD_STATUS == "success"'
+  artifacts:
+    paths:
+    - ./dist/*
+    - ./coverage.xml
+
+
+#--------------------------------
+# Deploy Proget Packages ( Deply-Local Stage )
+#--------------------------------
+proget_nuget:
+  stage: deploy
+  image: docker.io/phellams/phellams-psm-builder:latest
+  tags:
+    - docker
+  script:
+    - ./devops/scripts/deploy-proget.ps1
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_BUILD_STAGE == "release" && $CI_BUILD_STATUS == "success"'
+    # - if: '$CI_SERVER_URL == "https://$ENV:GITLAB_HOST"'
+  artifacts:
+    paths:
+      - ./dist/*
+      - ./coverage.xml
+
+# --------------------------------
+# Deploy Chocolatey Package Stage
+# choco_nuget:
+#   stage: deploy
+#   image: docker.io/phellams/phellams-psm-builder:latest
+#   tags:
+#     - docker
+#   script:
+#     - pwsh.exe
+#     - .\build\scripts\deploy-extended-chocolatey.ps1
+#   rules:
+#     - if: '$CI_COMMIT_BRANCH == "main" && $CI_BUILD_STAGE == "release" && $CI_BUILD_STATUS == "success"'
+#   artifacts:
+#     paths:
+#     - ./dist/*
+#     - ./coverage.xml
+
+# --------------------------------
+# Deploy PSGallary Package Stage
+psgal_nuget:
+  stage: deploy
+  image: docker.io/phellams/phellams-psm-builder:latest
+  tags:
+    - docker
   script:
     - pwsh.exe
-    - write-host -f green "template ci\cd config successfull"
-pester-job:
-  stage: pester
+    - .\build\scripts\deploy-psgallary.ps1
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_BUILD_STAGE == "release" && $CI_BUILD_STATUS == "success"'
+
+#-------------------------------------
+# Deploy Coverage to Code cov ( Test Stage )
+#-------------------------------------
+coverage:
+  stage: deploy
+  image: docker.io/phellams/phellams-psm-builder:latest
+  tags:
+    - docker
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_BUILD_STAGE == "release" && $CI_BUILD_STATUS == "success"'
+ 
   script:
-    - pwsh.exe
-    - write-host -f green "template ci\cd config successfull"
-test-pwsh-job:
-  stage: test_pwsh
-  script:
-    - pwsh.exe
-    - write-host -f green "template ci\cd config successfull"
-test-powershell-job:
-  stage: test_powershell
-  script:
-    - powershell.exe
-    - write-host -f green "template ci\cd config successfull"
-psgallary-deploy-job:
-  stage: deploy_psgallary
-  script:
-    - pwsh.exe
-psprivate-deploy-job:
-  stage: deploy_psprivate
-  script:
-    - pwsh.exe
-    - write-host -f green "template ci\cd config successfull"
-#include:
-#  - template: auto-devops.gitlab-ci.yml
+    - ./devops/scripts/test-deploy-codecov-report.ps1
+  artifacts:
+    paths:
+      - ./coverage.xml
