@@ -1,0 +1,29 @@
+{
+    "moduleName"  : "ptoml",
+    "releaseType" : "public",
+    "gitUser"     : "sgkens",
+    "gitGroup"    : "powershell",
+    "gitlabID"    : "212",
+    "license"     : "MIT",
+    "iconUrl"     : "https://raw.githubusercontent.com/phellams/phellams-general-resources/main/logos/ptoml/ptoml.png",
+    "ModuleFiles" :
+    [
+        "ptoml.psm1",
+        "ptoml.psd1",
+        "LICENSE",
+        "icon.png",
+        "readme.md",
+        "readme.txt"
+    ],
+    "ModuleFolders": 
+    [
+        "lib",
+        "tools",
+        "cmdlets",
+        "nestedmodules"
+    ],
+    "ModuleExclude": 
+    [
+       "commit-helper.ps1"
+    ]
+}
