@@ -5,3 +5,5 @@ ptoml/obj
 coverage.xml
 lib/ptoml
 dist/
+.vscode
+lib/ptoml
