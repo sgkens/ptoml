@@ -1,7 +1,7 @@
 @{
 
     RootModule           = 'ptoml.psm1'
-    ModuleVersion     = '0.1.0.0' # 4th number must be omiited if using pre-release
+    ModuleVersion     = '0.2.0.0' # 4th number must be omiited if using pre-release
     # CompatiblePSEditions = @()
     GUID                 = '32103f6a-74d0-4870-8d28-0856f84010a8'
     Author               = 'Garvey k. Snow'
@@ -47,7 +47,9 @@
         'ptcoth',
         'ptct'
         )
-    NestedModules        = @()
+    NestedModules        = @(
+        'nestedmodules/colorconsole/libs/cmdlets/New-ColorConsole.psm1'
+    )
     # DscResourcesToExport = @()
     ModuleList = @()
     # FileList = @()
